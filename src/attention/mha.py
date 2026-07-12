@@ -1,6 +1,8 @@
 import math
 import torch
 import torch.nn as nn
+from typing import Tuple
+from torch import Tensor
 
 class MultiHeadAttention(nn.Module):
     """
@@ -52,7 +54,7 @@ class MultiHeadAttention(nn.Module):
         if gated:
             self.linear_g = nn.Linear(c_in, c*N_head)
 
-    def prepare_qkv(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor):
+    def prepare_qkv(self, q: Tensor, k: Tensor, v: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Splits the embeddings into individual heads and transforms the input
         shapes of form (*, q/k/v, *, N_head*c) into the shape
@@ -60,9 +62,9 @@ class MultiHeadAttention(nn.Module):
         in the original tensors is given by attn_dim.
 
         Args:
-            q (torch.Tensor): Query embedding of shape (*, q, *, N_head*c).
-            k (torch.Tensor): Key embedding of shape (*, k, *, N_head*c).
-            v (torch.Tensor): Value embedding of shape (*, v, *, N_head*c).
+            q (Tensor): Query embedding of shape (*, q, *, N_head*c).
+            k (Tensor): Key embedding of shape (*, k, *, N_head*c).
+            v (Tensor): Value embedding of shape (*, v, *, N_head*c).
 
         Returns:
             tuple: The rearranged embeddings q, k, and v of
@@ -90,7 +92,7 @@ class MultiHeadAttention(nn.Module):
 
         return q, k, v
 
-    def prepare_qkv_global(self, q: torch.Tensor, k: torch.Tensor, v:torch.Tensor):
+    def prepare_qkv_global(self, q: Tensor, k: Tensor, v:Tensor) -> Tuple[Tensor, Tensor, Tensor]:
         """
         Prepares the query, key and value embeddings with the following
         differences to the non-global version:
@@ -98,9 +100,9 @@ class MultiHeadAttention(nn.Module):
             - the query vectors are contracted into one, average query vector.
 
         Args:
-            q (torch.Tensor): Query embeddings of shape (*, q, *, N_head*c).
-            k (torch.Tensor): Key embeddings of shape (*, k, *, c).
-            v (torch.Tensor): Value embeddings of shape (*, v, *, c).
+            q (Tensor): Query embeddings of shape (*, q, *, N_head*c).
+            k (Tensor): Key embeddings of shape (*, k, *, c).
+            v (Tensor): Value embeddings of shape (*, v, *, c).
 
         Returns:
             tuple: The rearranged embeddings q, k, and v of
@@ -122,19 +124,19 @@ class MultiHeadAttention(nn.Module):
 
         return q, k, v
 
-    def forward(self, x: torch.Tensor, bias: torch.Tensor=None, attention_mask: torch.Tensor=None):
+    def forward(self, x: Tensor, bias: Tensor=None, attention_mask: Tensor=None) -> Tensor:
         """
         Args:
-            x (torch.Tensor): Input tensor of shape (*, q/k/v, *, c_in)
-            bias (torch.Tensor, optional): Optional bias tensor of shape
+            x (Tensor): Input tensor of shape (*, q/k/v, *, c_in)
+            bias (Tensor, optional): Optional bias tensor of shape
                 (*, N_head, q, k) that will be added to the attention weights.
                 Defaults to None.
-            attention_mask (torch.Tensor, optional): Optional attention mask
+            attention_mask (Tensor, optional): Optional attention mask
                 of shape (*, k). If set, the keys with value 0 in the mask will
                 not be attended to.
 
         Returns:
-            torch.Tensor: Output tensor of shape (*, q/k/v, *, c_in)
+            Tensor: Output tensor of shape (*, q/k/v, *, c_in)
         """
         out = None
 
