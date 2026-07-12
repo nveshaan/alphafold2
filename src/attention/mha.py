@@ -1,7 +1,6 @@
 import math
 import torch
 import torch.nn as nn
-from typing import Tuple
 from torch import Tensor
 
 class MultiHeadAttention(nn.Module):
@@ -54,7 +53,7 @@ class MultiHeadAttention(nn.Module):
         if gated:
             self.linear_g = nn.Linear(c_in, c*N_head)
 
-    def prepare_qkv(self, q: Tensor, k: Tensor, v: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+    def prepare_qkv(self, q: Tensor, k: Tensor, v: Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """
         Splits the embeddings into individual heads and transforms the input
         shapes of form (*, q/k/v, *, N_head*c) into the shape
@@ -92,7 +91,7 @@ class MultiHeadAttention(nn.Module):
 
         return q, k, v
 
-    def prepare_qkv_global(self, q: Tensor, k: Tensor, v:Tensor) -> Tuple[Tensor, Tensor, Tensor]:
+    def prepare_qkv_global(self, q: Tensor, k: Tensor, v:Tensor) -> tuple[Tensor, Tensor, Tensor]:
         """
         Prepares the query, key and value embeddings with the following
         differences to the non-global version:
@@ -138,7 +137,6 @@ class MultiHeadAttention(nn.Module):
         Returns:
             Tensor: Output tensor of shape (*, q/k/v, *, c_in)
         """
-        out = None
 
         q = self.linear_q(x)
         k = self.linear_k(x)
