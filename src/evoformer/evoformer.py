@@ -67,7 +67,7 @@ class EvoformerStack(nn.Module):
         super().__init__()
 
         self.blocks = nn.ModuleList([EvoformerBlock(c_m, c_z) for _ in range(num_blocks)])
-        self.linear = nn.Linear(c_m, c_z)
+        self.linear = nn.Linear(c_m, c_s)
 
     def forward(self, m: int, z: int) -> tuple[Tensor, Tensor, Tensor]:
         """
