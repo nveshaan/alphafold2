@@ -52,7 +52,7 @@ class TriangleMultiplication(nn.Module):
         b = torch.sigmoid(self.linear_b_g(z)) * self.linear_b_p(z)
         g = torch.sigmoid(self.linear_g(z))
 
-        if self.mult_type is "outgoing":
+        if self.mult_type == "outgoing":
             z = torch.einsum('...ikc,...jkc->ijc', a, b)
         else:
             z = torch.einsum('...kic,...kjc->ijc', a, b)
@@ -85,7 +85,7 @@ class TriangleAttention(nn.Module):
         self.node_type = node_type
 
         self.layer_norm = nn.LayerNorm(c_z)
-        if node_type is 'starting_node':
+        if node_type == 'starting_node':
             attn_dim = -2
         else:
             attn_dim = -3
@@ -109,7 +109,7 @@ class TriangleAttention(nn.Module):
         b = self.linear(z)
         b = b.moveaxis(-1, -3)
 
-        if self.node_type is 'ending_node':
+        if self.node_type == 'ending_node':
             b = b.transpose(-1, -2)
 
         out = self.mha(z, bias=b)
@@ -194,5 +194,6 @@ class PairStack(nn.Module):
         z = z + self.dropout_rowwise(self.tri_mul_in(z))
         z = z + self.dropout_rowwise(self.tri_att_start(z))
         z = z + self.dropout_columnwise(self.tri_att_end(z))
+        z = z + self.pair_transition(z)
 
         return z
