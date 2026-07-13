@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+
 class MultiHeadAttention(nn.Module):
     """
     A MultiHeadAttention module with optional bias and optional gating.
@@ -152,10 +153,10 @@ class MultiHeadAttention(nn.Module):
         a = torch.einsum('...qc,...kc->...qk', q, k)
 
         if bias is not None:
-            # bias_batch_shape = bias.shape[:-3]
-            # bias_bc_shape = bias_batch_shape + (1,)*(a.ndim-len(bias_batch_shape)-3) + bias.shape[-3:]
-            # bias = bias.view(bias_bc_shape)
-            bias = bias.unsqueeze(1)
+            bias_batch_shape = bias.shape[:-3]
+            bias_bc_shape = bias_batch_shape + (1,)*(a.ndim-len(bias_batch_shape)-3) + bias.shape[-3:]
+            bias = bias.view(bias_bc_shape)
+            # bias = bias.unsqueeze(1)
 
             a = a + bias
 
