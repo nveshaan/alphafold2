@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any
 
 import torch
-
+import math
 
 CaseFn = Callable[[], Any]
 
@@ -19,6 +19,9 @@ TESTS_DIR = ROOT / "tests"
 ATTENTION_TESTS_DIR = TESTS_DIR / "attention"
 FEATURE_EMBEDDING_TESTS_DIR = TESTS_DIR / "feature_embedding"
 EVOFORMER_TESTS_DIR = TESTS_DIR / "evoformer"
+GEOMETRY_TESTS_DIR = TESTS_DIR / "geometry"
+STRUCTURE_MODULE_TESTS_DIR = TESTS_DIR / "structure_module"
+MODEL_TESTS_DIR = TESTS_DIR / "model"
 FEATURE_EXTRACTION_TESTS_DIR = TESTS_DIR / "feature_extraction"
 
 for path in reversed(
@@ -28,6 +31,9 @@ for path in reversed(
 		str(ATTENTION_TESTS_DIR),
 		str(FEATURE_EMBEDDING_TESTS_DIR),
 		str(EVOFORMER_TESTS_DIR),
+		str(GEOMETRY_TESTS_DIR),
+		str(STRUCTURE_MODULE_TESTS_DIR),
+		str(MODEL_TESTS_DIR),
 		str(FEATURE_EXTRACTION_TESTS_DIR),
 	],
 ):
@@ -371,6 +377,265 @@ def run_feature_extraction_case() -> str:
 	assert batch['target_feat'].dtype == torch.float32, f"Target feat isn't a float, but {batch['target_feat'].dtype}."
 
 	return "feature_extraction case completed"
+
+
+@register_case("structure_module")
+def run_structure_module_case() -> str:
+	from structure_module_checks import (
+		N_head,
+		c,
+		c_s,
+		c_z,
+		n_layer,
+		n_pv,
+		n_qp,
+		test_module_forward,
+		test_module_method,
+		test_module_shape,
+	)
+	from structure_module.ipa import InvariantPointAttention
+	from structure_module.structure_module import AngleResNet, AngleResNetLayer, BackboneUpdate, StructureModule, StructureModuleTransition
+
+	control_folder = str(STRUCTURE_MODULE_TESTS_DIR)
+
+	ipa = InvariantPointAttention(c_s, c_z, n_qp, n_pv, N_head, c)
+	test_module_shape(ipa, "ipa", control_folder)
+	test_module_method(ipa, "ipa_prep", "s", ("q", "k", "v", "qp", "kp", "vp"), control_folder, lambda x: ipa.prepare_qkv(x))
+	test_module_method(ipa, "ipa_att_scores", ("q", "k", "qp", "kp", "z", "T"), "att", control_folder, lambda *x: ipa.compute_attention_scores(*x))
+	test_module_method(ipa, "ipa_att_outputs", ("att_scores", "z", "v", "vp", "T"), ("v_out", "vp_out", "vp_outnorm", "pairwise_out"), control_folder, lambda *x: ipa.compute_outputs(*x))
+	test_module_forward(ipa, "ipa", ("s", "z", "T"), "out", control_folder)
+
+	transition = StructureModuleTransition(c_s)
+	test_module_shape(transition, "sm_transition", control_folder)
+	test_module_forward(transition, "sm_transition", "s", "s_out", control_folder)
+
+	bb_update = BackboneUpdate(c_s)
+	test_module_shape(bb_update, "bb_update", control_folder)
+	test_module_forward(bb_update, "bb_update", "s", "T_out", control_folder)
+
+	resnet_layer = AngleResNetLayer(c)
+	test_module_shape(resnet_layer, "resnet_layer", control_folder)
+	test_module_forward(resnet_layer, "resnet_layer", "a", "a_out", control_folder)
+
+	angle_resnet = AngleResNet(c_s, c)
+	test_module_shape(angle_resnet, "angle_resnet", control_folder)
+	test_module_forward(angle_resnet, "angle_resnet", ("s", "s_initial"), "alpha", control_folder)
+
+	sm = StructureModule(c_s, c_z, n_layer, c)
+	test_module_shape(sm, "structure_module", control_folder)
+
+	def process_outputs_check(*x):
+		return sm.process_outputs(*x)
+
+	test_module_method(sm, "sm_process_outputs", ("T", "alpha", "F"), ("pos", "pos_mask", "pseudo_beta"), control_folder, process_outputs_check, include_batched=False)
+
+	def forward_check(*args):
+		output = sm(*args)
+		return output['angles'], output['frames'], output['final_positions'], output['position_mask'], output['pseudo_beta_positions']
+
+	test_module_method(sm, "structure_module", ("s", "z", "F"), ("angles", "frames", "final_positions", "position_mask", "pseudo_beta_positions"), control_folder, forward_check)
+
+	return "structure_module case completed"
+
+
+@register_case("model")
+def run_model_case() -> str:
+	from feature_extraction.feature_extraction import create_features_from_a3m
+	from model_checks import (
+		c_e,
+		c_m,
+		c_s,
+		c_z,
+		f_e,
+		num_blocks_evoformer,
+		num_blocks_extra_msa,
+		tf_dim,
+		test_module_forward,
+		test_module_method,
+		test_module_shape,
+	)
+	from src.model.model import Model
+
+	control_folder = str(MODEL_TESTS_DIR)
+	model = Model(c_m, c_z, c_e, f_e, tf_dim, c_s, num_blocks_extra_msa, num_blocks_evoformer)
+	test_module_shape(model, "model", control_folder)
+
+	feature_file = TESTS_DIR / "feature_extraction" / "alignment_tautomerase.a3m"
+	single_batches = [create_features_from_a3m(str(feature_file), seed=seed) for seed in range(4)]
+	batch = {key: torch.stack([single_batch[key] for single_batch in single_batches], dim=-1) for key in single_batches[0]}
+
+	expected_shapes = {
+		"msa_feat": (512, 59, 49, 4),
+		"extra_msa_feat": (5120, 59, 25, 4),
+		"target_feat": (59, 21, 4),
+		"residue_index": (59, 4),
+	}
+
+	shapes = {key: value.shape for key, value in batch.items()}
+	assert set(expected_shapes.keys()) == set(shapes.keys())
+	for key, shape in shapes.items():
+		assert expected_shapes[key] == shape, f"Shape mismatch for {key}: {shape} vs {expected_shapes[key]}"
+
+	def test_method(*args):
+		outputs = model(*args)
+		return outputs['final_positions'], outputs['position_mask'], outputs['angles'], outputs['frames']
+
+	test_module_method(model, "model", "batch", ("final_positions", "position_mask", "angles", "frames"), control_folder, test_method)
+
+	return "model case completed"
+
+
+@register_case("geometry")
+def run_geometry_case() -> str:
+	from bunny_renderer import BunnyRenderer
+	from geometry.geometry import (
+		assemble_4x4_transform,
+		calculate_chi_transforms,
+		calculate_non_chi_transforms,
+		compute_all_atom_coordinates,
+		compute_global_transforms,
+		conjugate_quat,
+		create_3x3_rotation,
+		create_4x4_transform,
+		invert_4x4_transform,
+		makeRotX,
+		precalculate_rigid_transforms,
+		quat_from_axis,
+		quat_mul,
+		quat_to_3x3_rotation,
+		quat_vector_mul,
+		warp_3d_point,
+	)
+	from geometry.residue_constants import atom_local_positions, atom_mask, atom_types, chi_angles_chain, chi_angles_mask, restype_order
+
+	control_folder = str(GEOMETRY_TESTS_DIR)
+
+	phi = torch.tensor(math.pi / 4)
+	n = torch.tensor([0.2, 0.5, -0.3])
+	n = n / torch.linalg.vector_norm(n)
+	phi_batch = phi.broadcast_to(2, 5)
+	n_batch = n.broadcast_to(2, 5, 3)
+	q = quat_from_axis(phi, n)
+	q_batch = quat_from_axis(phi_batch, n_batch)
+	q_exp = torch.load(f"{control_folder}/quat_from_axis_check.pt")
+	assert torch.allclose(q, q_exp, atol=1e-5)
+	assert torch.allclose(q_batch, q_exp.broadcast_to((2, 5, 4)), atol=1e-5)
+	p = torch.tensor([0.3, -0.4, 0.1, 0.8])
+	p_batch = p.broadcast_to(2, 5, 4)
+	pq = quat_mul(p, q)
+	pq_batch = quat_mul(p_batch, q_batch)
+	pq_exp = torch.load(f"{control_folder}/quat_mul_check.pt")
+	assert torch.allclose(pq, pq_exp, atol=1e-5)
+	assert torch.allclose(pq_batch, pq_exp.broadcast_to((2, 5, 4)), atol=1e-5)
+
+	q = torch.tensor([0.3, -0.4, 0.1, 0.8])
+	q = q / torch.linalg.vector_norm(q)
+	q_copy = q.clone()
+	v = torch.tensor([4.0, 1.0, 2.0])
+	q_conj = conjugate_quat(q)
+	q_conj_batch = conjugate_quat(q.broadcast_to((3, 4, 4)))
+	q_conj_exp = torch.load(f"{control_folder}/quat_conjugate_check.pt")
+	q_conj_batch_exp = q_conj_exp.broadcast_to(3, 4, 4)
+	assert torch.allclose(q_copy, q, atol=1e-5)
+	assert torch.allclose(q_conj, q_conj_exp, atol=1e-5)
+	assert torch.allclose(q_conj_batch, q_conj_batch_exp, atol=1e-5)
+	qv = quat_vector_mul(q, v)
+	qv_batch = quat_vector_mul(q.broadcast_to(3, 4, 4), v.broadcast_to(3, 4, 3))
+	qv_exp = torch.load(f"{control_folder}/quat_vector_check.pt")
+	qv_batch_exp = qv_exp.broadcast_to(3, 4, 3)
+	assert torch.allclose(qv, qv_exp, atol=1e-5)
+	assert torch.allclose(qv_batch, qv_batch_exp, atol=1e-5)
+
+	ex = torch.tensor([-0.6610, -0.7191, 0.1293])
+	ey = torch.tensor([-0.2309, 1.7710, -1.3062])
+	ex_batch = ex.broadcast_to(5, 3)
+	ey_batch = ey.broadcast_to(5, 3)
+	R = create_3x3_rotation(ex, ey)
+	R_batch = create_3x3_rotation(ex_batch, ey_batch)
+	R_exp = torch.tensor([[-0.6709, -0.6218, 0.4041], [-0.7299, 0.4572, -0.5082], [0.1312, -0.6359, -0.7605]])
+	R_exp_batch = R_exp.broadcast_to((5, 3, 3))
+	assert torch.allclose(R, R_exp, atol=1e-3)
+	assert torch.allclose(R_batch, R_exp_batch, atol=1e-3)
+
+	R = torch.tensor([[0.7071, -0.7071, 0.0000], [0.7071, 0.7071, -0.0000], [0.0000, 0.0000, 1.0000]])
+	t = torch.tensor([2.0, 1.0, -1.0])
+	R_batch = R.broadcast_to((2, 1, 3, 3))
+	t_batch = t.broadcast_to((2, 1, 3))
+	T = assemble_4x4_transform(R, t)
+	T_batch = assemble_4x4_transform(R_batch, t_batch)
+	T_exp = torch.load(f"{control_folder}/assemble_4x4_check.pt")
+	T_batch_exp = T_exp.broadcast_to((2, 1, 4, 4))
+	assert torch.allclose(T, T_exp, atol=1e-5)
+	assert torch.allclose(T_batch, T_batch_exp, atol=1e-5)
+
+	x = torch.tensor([-1.0, 0.0, 3.0])
+	y = R @ x + t
+	y_4x4 = None
+	T = assemble_4x4_transform(R, t)
+	y_4x4 = (T @ torch.cat((x, torch.tensor([1.0]))))[..., :3]
+	assert torch.allclose(y, y_4x4)
+
+	T = torch.load(f"{control_folder}/assemble_4x4_check.pt")
+	x = torch.tensor([-1.0, 0.0, 3.0])
+	batch_shape = (2, 1)
+	T_batch = T.broadcast_to(batch_shape + T.shape)
+	x_batch = x.broadcast_to(batch_shape + x.shape)
+	x_warped = warp_3d_point(T, x)
+	x_warped_batch = warp_3d_point(T_batch, x_batch)
+	x_exp = torch.load(f"{control_folder}/warp_3d_point.pt")
+	assert torch.allclose(x_exp, x_warped, atol=1e-5)
+	assert torch.allclose(x_warped_batch, x_exp.broadcast_to(batch_shape + x_exp.shape), atol=1e-5)
+
+	ex = torch.tensor([1.2, 0.3, 0.5])
+	ey = torch.tensor([1.6, -2.2, 0.3])
+	t = torch.tensor([0.4, 0.2, 0.85])
+	T = create_4x4_transform(ex, ey, t)
+	T_batch = create_4x4_transform(ex.broadcast_to(2, 4, 3), ey.broadcast_to(2, 4, 3), t.broadcast_to(2, 4, 3))
+	T_exp = torch.load(f"{control_folder}/create_4x4_T.pt")
+	assert torch.allclose(T, T_exp, atol=1e-5)
+	assert torch.allclose(T_batch, T_exp.broadcast_to(2, 4, 4, 4), atol=1e-5)
+
+	T = torch.load(f"{control_folder}/create_4x4_T.pt")
+	T_batch = T.broadcast_to((5, 1, 4, 4))
+	T_inv = invert_4x4_transform(T)
+	T_inv_batch = invert_4x4_transform(T_batch)
+	T_inv_exp = torch.load(f"{control_folder}/invert_4x4_T.pt")
+	assert torch.allclose(T_inv, T_inv_exp, atol=1e-5)
+	assert torch.allclose(T_inv_batch, T_inv_exp.broadcast_to(5, 1, 4, 4), atol=1e-5)
+
+	phi = torch.tensor([math.cos(0.5), math.sin(0.5)])
+	phi_batch = phi.broadcast_to(5, 3, 2)
+	T = makeRotX(phi)
+	T_batch = makeRotX(phi_batch)
+	T_exp = torch.load(f"{control_folder}/makeRotX_T.pt")
+	assert torch.allclose(T, T_exp, atol=1e-5)
+	assert torch.allclose(T_batch, T_exp.broadcast_to(5, 3, 4, 4), atol=1e-5)
+
+	transforms = calculate_non_chi_transforms()
+	transforms_exp = torch.load(f"{control_folder}/non_chi_transforms.pt")
+	assert torch.allclose(transforms, transforms_exp, atol=1e-5)
+
+	chi_transforms = calculate_chi_transforms()
+	chi_transforms_exp = torch.load(f"{control_folder}/chi_transforms.pt")
+	assert torch.allclose(chi_transforms, chi_transforms_exp, atol=1e-5)
+	all_transforms = torch.load(f"{control_folder}/all_transforms.pt")
+	assert torch.allclose(precalculate_rigid_transforms(), all_transforms, atol=1e-5)
+
+	N_res = 5
+	T = torch.linspace(-4, 4, N_res * 4 * 4).reshape(N_res, 4, 4)
+	alpha = torch.linspace(-3, 3, N_res * 7 * 2).reshape(N_res, 7, 2)
+	F = torch.tensor([4, 0, 18, 2, 0], dtype=torch.int64)
+	global_transforms = compute_global_transforms(T, alpha, F)
+	global_transforms_exp = torch.load(f"{control_folder}/global_transforms.pt")
+	assert torch.allclose(global_transforms, global_transforms_exp, atol=1e-5)
+
+	atom_positions, atom_mask = compute_all_atom_coordinates(T, alpha, F)
+	atom_positions_exp = torch.load(f"{control_folder}/global_atom_positions.pt")
+	atom_mask_exp = torch.load(f"{control_folder}/global_atom_mask.pt")
+	assert torch.allclose(atom_positions, atom_positions_exp, atol=1e-5)
+	assert torch.allclose(atom_mask, atom_mask_exp, atol=1e-5)
+
+	return "geometry case completed"
 
 
 if __name__ == "__main__":
