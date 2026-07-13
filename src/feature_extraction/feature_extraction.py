@@ -44,7 +44,7 @@ def onehot_encode_aa_type(seq: list[str], include_gap_token: bool=False) -> Tens
     """
     restype_order = restype_order_with_x if not include_gap_token else restype_order_with_x_and_gap
     
-    sequence_idx = Tensor([restype_order[a] for a in seq])
+    sequence_idx = Tensor([restype_order[a] for a in seq]).long()
     encoding = nn.functional.one_hot(sequence_idx, num_classes=len(restype_order))
 
     return encoding
@@ -202,7 +202,7 @@ def mask_cluster_centers(features: dict, mask_probability: float=0.15, seed: int
 
     return features
 
-def cluster_assignments(features: dict) -> dict:
+def cluster_assignment(features: dict) -> dict:
     """
     Assigns sequences in the extra MSA to their closest cluster centers based on Hamming Distance.
 
@@ -430,7 +430,7 @@ def create_features_from_a3m(file_name: str, seed: int=42) -> dict:
     transforms = [
         lambda x: select_cluster_centers(x, seed=select_clusters_seed),
         lambda x: mask_cluster_centers(x, seed=mask_clusters_seed),
-        cluster_assignments,
+        cluster_assignment,
         summarize_clusters,
         lambda x: crop_extra_msa(x, seed=crop_extra_seed)
     ]
