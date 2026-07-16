@@ -17,8 +17,6 @@
 # Removal of some constants that aren't needed by the tutorials.
 # Addition of some utility collections of the constants.
 
-# Source: https://github.com/kilianmandon/alphafold-decoded/blob/main/solutions/geometry/residue_constants.py
-
 """Constants used in AlphaFold."""
 
 import torch

@@ -1,5 +1,3 @@
-# Source: https://github.com/kilianmandon/alphafold-decoded/blob/main/solutions/geometry/geometry.py
-
 import torch
 from geometry.residue_constants import rigid_group_atom_position_map, chi_angles_mask,  chi_angles_chain
 from geometry import residue_constants
