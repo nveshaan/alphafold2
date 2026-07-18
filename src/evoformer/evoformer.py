@@ -1,7 +1,7 @@
 import torch.nn as nn
-from evoformer.dropout import DropoutRowwise
-from evoformer.msa_stack import MSARowAttentionWithPairBias, MSAColumnAttention, OuterProductMean, MSATransition
-from evoformer.pair_stack import PairStack
+from src.evoformer.dropout import DropoutRowwise
+from src.evoformer.msa_stack import MSARowAttentionWithPairBias, MSAColumnAttention, OuterProductMean, MSATransition
+from src.evoformer.pair_stack import PairStack
 from torch import Tensor
 
 

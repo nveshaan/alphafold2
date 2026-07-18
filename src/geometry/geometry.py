@@ -1,6 +1,6 @@
 import torch
-from geometry.residue_constants import rigid_group_atom_position_map, chi_angles_mask,  chi_angles_chain
-from geometry import residue_constants
+from src.geometry.residue_constants import rigid_group_atom_position_map, chi_angles_mask,  chi_angles_chain
+from src.geometry import residue_constants
 from torch import Tensor
 
 def create_3x3_rotation(ex: Tensor, ey: Tensor) -> Tensor:

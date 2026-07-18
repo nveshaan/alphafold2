@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from evoformer.dropout import DropoutRowwise, DropoutColumnwise
-from attention.mha import MultiHeadAttention
+from src.evoformer.dropout import DropoutRowwise, DropoutColumnwise
+from src.attention.mha import MultiHeadAttention
 from torch import Tensor
 
 

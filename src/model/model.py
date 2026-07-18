@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from feature_embedding.input_embedder import InputEmbedder
-from feature_embedding.recycling_embedder import RecyclingEmbedder
-from feature_embedding.extra_msa_stack import ExtraMsaStack, ExtraMsaEmbedder
-from evoformer.evoformer import EvoformerStack
-from structure_module.structure_module import StructureModule
+from src.feature_embedding.input_embedder import InputEmbedder
+from src.feature_embedding.recycling_embedder import RecyclingEmbedder
+from src.feature_embedding.extra_msa_stack import ExtraMsaStack, ExtraMsaEmbedder
+from src.evoformer.evoformer import EvoformerStack
+from src.structure_module.structure_module import StructureModule
 
 
 class Model(nn.Module):

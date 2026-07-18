@@ -1,7 +1,7 @@
 from torch import layer_norm
 import torch
 import torch.nn as nn
-from attention.mha import MultiHeadAttention
+from src.attention.mha import MultiHeadAttention
 from torch import Tensor
 
 

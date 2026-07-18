@@ -3,7 +3,7 @@ import math
 import torch.nn as nn
 from torch import Tensor
 
-from geometry.geometry import invert_4x4_transform, warp_3d_point
+from src.geometry.geometry import invert_4x4_transform, warp_3d_point
 
 
 class InvariantPointAttention(nn.Module):

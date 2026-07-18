@@ -3,7 +3,7 @@ import modelcif
 import modelcif.model
 import modelcif.dumper
 import io
-from geometry.residue_constants import atom_types
+from src.geometry.residue_constants import atom_types
 
 def parameter_renaming(weights):
     name_map = {
